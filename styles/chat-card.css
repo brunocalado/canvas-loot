@@ -1,0 +1,43 @@
+/*!
+ * Canvas Loot
+ * 2026 https://github.com/brunocalado
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3.
+ */
+
+/* The loot chat card. Unlike the windows it sets no background and no text colour: both come
+   from the core theme, so the card reads as one more message in a light or a dark chat log.
+   The accent is the only colour it adds. */
+
+.canvas-loot.cl-chat-card {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap);
+  padding-left: var(--cl-gap);
+  border-left: 3px solid var(--cl-accent);
+
+  /* A drop or a throw card pans to its loot when clicked. */
+  &[data-tile-uuid] {
+    cursor: pointer;
+  }
+
+  .cl-chat-card-img {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: var(--cl-radius);
+    object-fit: cover;
+  }
+
+  .cl-chat-card-text {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+
+    i {
+      color: var(--cl-accent);
+    }
+  }
+}

@@ -1,0 +1,23 @@
+<section class="cl-stack">
+<p class="cl-settings-intro">Types switched on can be dropped on the canvas. Types switched off are refused.</p>
+<label class="cl-settings-row">
+  <span class="cl-settings-row-text">
+    <h3>Quantity field</h3>
+    <p>Path to an item's stack size. Empty always drops the whole item.{{#if hasPreset}}
+      {{systemTitle}} default: {{#if presetPath}}{{presetPath}}{{else}}none{{/if}}.{{/if}}</p>
+  </span>
+  <input type="text" name="quantityPath" value="{{quantityPath}}" placeholder="system.quantity">
+</label>
+{{#each types}}
+<label class="cl-settings-row">
+  <span class="cl-settings-row-text"><h3>{{label}}</h3></span>
+  <input type="checkbox" class="cl-toggle" role="switch" data-type="{{type}}" {{checked enabled}}>
+</label>
+{{/each}}
+<footer>
+  <button type="submit" class="cl-button cl-button-primary">Save</button>
+  {{#if hasPreset}}
+  <button type="button" class="cl-button" data-action="restoreDefaults">Restore system defaults</button>
+  {{/if}}
+</footer>
+</section>

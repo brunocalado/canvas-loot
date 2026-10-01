@@ -1,0 +1,46 @@
+<section class="cl-stack">
+<p class="cl-settings-intro">A player drop that lands farther than adjacent, within the range below, is a throw.</p>
+<label class="cl-settings-row">
+  <span class="cl-settings-row-text">
+    <h3>Allow throwing</h3>
+    <p>When off, players can only drop next to their token.</p>
+  </span>
+  <input type="checkbox" class="cl-toggle" role="switch" name="throwEnabled" {{checked throwEnabled}}>
+</label>
+<label class="cl-settings-row">
+  <span class="cl-settings-row-text">
+    <h3>Maximum range (grid spaces)</h3>
+    <p>{{min}} to {{max}}. A range of 1 is an ordinary drop.</p>
+  </span>
+  <input type="number" name="throwRange" value="{{throwRange}}" min="{{min}}" max="{{max}}" step="1">
+</label>
+<div class="cl-settings-row cl-settings-row-wide">
+  <span class="cl-settings-row-text">
+    <h3>Throw sound</h3>
+    <p>Played on the Environment channel. Empty plays nothing. Default: {{defaultSound}}</p>
+  </span>
+  <file-picker name="throwSound" type="audio" value="{{throwSound}}"></file-picker>
+</div>
+<div class="cl-settings-row cl-settings-row-wide">
+  <span class="cl-settings-row-text">
+    <h3>Throw sound volume</h3>
+  </span>
+  <range-picker name="throwVolume" value="{{throwVolume}}" min="0" max="1" step="0.05"></range-picker>
+</div>
+<div class="cl-settings-row cl-settings-row-wide">
+  <span class="cl-settings-row-text">
+    <h3>Pickup sound</h3>
+    <p>Played on the Environment channel. Empty plays nothing. Default: {{defaultPickupSound}}</p>
+  </span>
+  <file-picker name="pickupSound" type="audio" value="{{pickupSound}}"></file-picker>
+</div>
+<div class="cl-settings-row cl-settings-row-wide">
+  <span class="cl-settings-row-text">
+    <h3>Pickup sound volume</h3>
+  </span>
+  <range-picker name="pickupVolume" value="{{pickupVolume}}" min="0" max="1" step="0.05"></range-picker>
+</div>
+<footer>
+  <button type="submit" class="cl-button cl-button-primary">Save</button>
+</footer>
+</section>

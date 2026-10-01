@@ -1,0 +1,169 @@
+/*!
+ * Canvas Loot
+ * 2026 https://github.com/brunocalado
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3.
+ */
+
+import {
+  MODULE_ID, FLAG_ITEM, LIGHT_SOURCES_ID, LOOT_SCALE, SETTING_QUANTITY_PATH, SETTING_THROW_ENABLED,
+  SETTING_THROW_RANGE, SYSTEM_PRESETS
+} from "./constants.js";
+
+let queue = Promise.resolve();
+
+/**
+ * An item's stack size under the configured quantity field, or null when it has none there. Read
+ * from the source, since the source is what an update writes back.
+ * @param {Item} item
+ * @returns {number|null}
+ */
+export function getQuantity(item) {
+  const path = game.settings.get(MODULE_ID, SETTING_QUANTITY_PATH);
+  if ( !path ) return null;
+  const n = foundry.utils.getProperty(item.toObject(), path);
+  return Number.isInteger(n) ? n : null;
+}
+
+/** The Item types the active system starts with disabled: every type its preset leaves out. */
+export function presetDisabledTypes() {
+  const preset = SYSTEM_PRESETS[game.system.id];
+  if ( !preset ) return [];
+  return game.documentTypes.Item.filter(t => (t !== CONST.BASE_DOCUMENT_TYPE) && !preset.itemTypes.includes(t));
+}
+
+/**
+ * Run GM-side mutations one at a time, in arrival order, so the first request wins when two
+ * players race for the same item or tile.
+ * @param {() => Promise<*>} fn
+ * @returns {Promise<*>}
+ */
+export function serial(fn) {
+  return (queue = queue.then(fn, fn));
+}
+
+/**
+ * Take a loot tile, or the light it carries, out of its layer's undo history. The GM's client
+ * records every change it makes to the scene it is viewing, including the ones made for a player's
+ * query, so Ctrl+Z would otherwise delete a dropped item or bring back one already picked up: the
+ * item would end up in neither place, or in both. A light brought back without its tile would
+ * burn where nothing can claim it.
+ * @param {TileDocument|AmbientLightDocument} doc
+ */
+export function forgetHistory(doc) {
+  if ( !canvas.scene || (doc.parent !== canvas.scene) ) return;
+  const layer = doc.layer;
+  if ( !layer ) return;
+  for ( const event of layer.history ) event.data = event.data.filter(d => d._id !== doc.id);
+  layer.history = layer.history.filter(event => event.data.length);
+}
+
+/**
+ * Whether loot already lies where a drop at this point would land: one item per grid space, or on a
+ * gridless scene, no overlap with another item's tile. Loot on other levels doesn't count. Reads the
+ * scene rather than the canvas, for the same reason as classifyDistance.
+ * @param {Scene} scene
+ * @param {string} levelId
+ * @param {{x: number, y: number}} point
+ * @returns {boolean}
+ */
+export function isLootAt(scene, levelId, point) {
+  const grid = scene.grid;
+  const target = grid.isGridless ? null : grid.getOffset(point);
+  const size = grid.size * LOOT_SCALE;
+  return scene.tiles.some(tile => {
+    if ( !tile.getFlag(MODULE_ID, FLAG_ITEM) || !tile.includedInLevel(levelId) ) return false;
+    const c = tile.shape.center;
+    if ( !target ) {
+      return (Math.abs(c.x - point.x) < ((tile.width + size) / 2)) && (Math.abs(c.y - point.y) < ((tile.height + size) / 2));
+    }
+    const o = grid.getOffset(c);
+    return (o.i === target.i) && (o.j === target.j);
+  });
+}
+
+/**
+ * The Light Sources API, when that module is active and new enough to carry a light with an item.
+ * Without it, loot moves no light at all.
+ * @returns {object|null}
+ */
+export function getLightSourcesApi() {
+  const lightSources = game.modules.get(LIGHT_SOURCES_ID);
+  const api = lightSources?.active ? lightSources.api : null;
+  if ( (typeof api?.dropLightWithItem !== "function") || (typeof api?.pickupGroundLight !== "function") ) return null;
+  return api;
+}
+
+/**
+ * Classify a point by its distance from a token: within reach, within throwing range, or neither.
+ * Reads only the token's own scene, never the canvas, because the GM's client that re-checks a
+ * player's request may be viewing another scene.
+ * The distance is in the scene's units, measured from the token's nearest edge (gridless) or nearest
+ * occupied space; it is only computed for a throw.
+ * @param {TokenDocument} tokenDoc
+ * @param {{x: number, y: number}} point
+ * @returns {{kind: "adjacent"|"throw"|"out", distance?: number}}
+ */
+export function classifyDistance(tokenDoc, point) {
+  return distanceClassifier(tokenDoc)(point);
+}
+
+/**
+ * classifyDistance for one token and many points: what depends only on the token and the settings is
+ * read once, which the drag preview needs to classify every space around the token.
+ * @param {TokenDocument} tokenDoc
+ * @returns {(point: {x: number, y: number}) => {kind: "adjacent"|"throw"|"out", distance?: number}}
+ */
+export function distanceClassifier(tokenDoc) {
+  const scene = tokenDoc.parent;
+  const grid = scene.grid;
+  const range = game.settings.get(MODULE_ID, SETTING_THROW_ENABLED)
+    ? game.settings.get(MODULE_ID, SETTING_THROW_RANGE) : 0;
+  const { width, height } = tokenDoc.getSize();
+  // Occupied offsets are 3D, one per elevation step. testAdjacency returns false when only one
+  // side has a k, so they are flattened to the 2D offsets the drop point has.
+  const spaces = new Map();
+  if ( !grid.isGridless ) {
+    for ( const { i, j } of tokenDoc.getOccupiedGridSpaceOffsets() ) spaces.set(`${i}.${j}`, { i, j });
+  }
+  const offsets = [...spaces.values()];
+  const centres = offsets.map(o => grid.getCenterPoint(o));
+  // Token#checkCollision needs the placeable, which exists only on a client viewing the scene.
+  // The polygon backend works from the Level's edges instead, which core builds on demand.
+  const level = scene.levels.get(tokenDoc.level);
+  const origin = tokenDoc.getMovementOrigin();
+
+  return point => {
+    let kind;
+    let distance;
+    let landing = point;
+    if ( grid.isGridless ) {
+      const dx = Math.max(tokenDoc.x - point.x, 0, point.x - (tokenDoc.x + width));
+      const dy = Math.max(tokenDoc.y - point.y, 0, point.y - (tokenDoc.y + height));
+      const gap = Math.hypot(dx, dy) / grid.size;
+      kind = (gap <= 1) ? "adjacent" : ((gap <= range) ? "throw" : "out");
+      distance = gap * grid.distance;
+    } else {
+      const target = grid.getOffset(point);
+      landing = grid.getCenterPoint(target);
+      if ( offsets.some(o => ((o.i === target.i) && (o.j === target.j)) || grid.testAdjacency(o, target)) ) {
+        kind = "adjacent";
+      }
+      else {
+        const paths = centres.map(c => grid.measurePath([c, landing]));
+        // Spaces decide the range; among equals, the shortest distance is the one reported, since an
+        // exact diagonal rule makes paths of the same spaces differ in length.
+        const nearest = paths.reduce((a, b) => (((b.spaces < a.spaces)
+          || ((b.spaces === a.spaces) && (b.distance < a.distance))) ? b : a));
+        kind = (nearest.spaces <= range) ? "throw" : "out";
+        distance = nearest.distance;
+      }
+    }
+    if ( kind === "out" ) return { kind };
+    const result = (kind === "throw") ? { kind, distance } : { kind };
+    if ( !level ) return result;
+    const blocked = CONFIG.Canvas.polygonBackends.move.testCollision(origin, landing, { type: "move", mode: "any", level });
+    return blocked ? { kind: "out" } : result;
+  };
+}

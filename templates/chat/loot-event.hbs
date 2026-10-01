@@ -1,0 +1,7 @@
+<div class="canvas-loot cl-chat-card" data-event="{{event}}"{{#if tileUuid}} data-tile-uuid="{{tileUuid}}" data-tooltip="Show on the map"{{/if}}>
+  <img class="cl-chat-card-img" src="{{item.img}}" alt="">
+  <p class="cl-chat-card-text">
+    <i class="fa-solid {{icon}}" inert></i>
+    <strong>{{actorName}}</strong> {{verb}} <strong>{{item.name}}</strong>{{#if distance}} {{distance}}{{/if}}
+  </p>
+</div>

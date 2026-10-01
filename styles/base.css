@@ -1,0 +1,249 @@
+/*!
+ * Canvas Loot
+ * 2026 https://github.com/brunocalado
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3.
+ */
+
+/* Design tokens and the window primitives every surface of the module shares. Every rule lives
+   inside .canvas-loot: Foundry loads all module stylesheets into one document, so an unscoped
+   rule reaches every other module's UI.
+
+   The surface and text ramp is deliberately ours rather than a core variable — windows are a
+   committed dark surface, not a themed sheet. Contrast ratios below are against
+   --cl-surface-0; re-check any new colour against the surface it actually sits on. 4.5:1 is a
+   floor, not a target. */
+
+.canvas-loot {
+  --cl-surface-0: #0b0d10;    /* window base                       */
+  --cl-surface-1: #14181d;    /* panels, settings rows             */
+  --cl-surface-2: #1c222a;    /* buttons, inputs                   */
+  --cl-surface-3: #252d37;    /* hover                             */
+  --cl-border: #2a323c;
+  --cl-text: #f2f5f8;         /* 17.0:1 on surface-0               */
+  --cl-text-dim: #a8b3c0;     /*  9.2:1 on surface-0               */
+  --cl-accent: #d4af37;       /*  9.2:1 — primary actions          */
+  --cl-accent-ink: #1a1200;   /* text on an accent fill            */
+  --cl-focus: #7cc4ff;
+
+  --cl-radius: 4px;
+  --cl-gap: 8px;
+  --cl-motion: 140ms;
+
+  /* The chat card carries .canvas-loot too, for the tokens, but it inherits the core theme's
+     background and text: a dark block would stand out in a light-themed chat log. So the dark
+     surface is painted on application windows only. */
+  &.application {
+    background: var(--cl-surface-0);
+    color: var(--cl-text);
+    font-family: var(--font-primary);
+    font-size: var(--font-size-13);
+
+    .window-content {
+      background: transparent;
+      color: var(--cl-text);
+      padding: var(--cl-gap);
+      overflow-y: auto;
+    }
+  }
+
+  /* Core paints its widgets through an --input-* variable set that it declares on the widget
+     itself, per theme — and a custom property declared on the element beats one inherited from
+     any ancestor, so remapping it on the window frame reaches nothing. It has to be redeclared on
+     the widgets. Without it, the world's light theme leaves a #444 placeholder near-invisible on
+     surface-2. Widgets that set their own colours still win over these, since a declared
+     property beats a variable fallback. */
+  :is(input, select, textarea) {
+    --input-background-color: var(--cl-surface-2);
+    --input-border-color: var(--cl-border);
+    --input-text-color: var(--cl-text);
+    --input-placeholder-color: var(--cl-text-dim);
+    --input-focus-outline-color: var(--cl-focus);
+    --input-focus-text-color: var(--cl-text);
+  }
+
+  .cl-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--input-height);
+    padding: 0 10px;
+    border: 1px solid var(--cl-border);
+    border-radius: var(--cl-radius);
+    background: var(--cl-surface-2);
+    color: var(--cl-text);
+    font-size: var(--font-size-13);
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    /* Motion budget: hover and active states only. */
+    transition: background var(--cl-motion) ease;
+
+    &:hover {
+      background: var(--cl-surface-3);
+      color: var(--cl-text);
+    }
+
+    /* The committing action of a surface — the one button that finishes what the window was
+       opened to do. Hover goes to white rather than a darker gold, so the change is unmistakable
+       against a gold that is already bright. At most one per surface: two of these is two
+       primaries, which is none. */
+    &.cl-button-primary {
+      border-color: var(--cl-accent);
+      background: var(--cl-accent);
+      color: var(--cl-accent-ink);
+      font-weight: 700;
+
+      &:hover {
+        background: var(--cl-text);
+        color: var(--cl-surface-0);
+      }
+
+      &:disabled {
+        border-color: var(--cl-border);
+        background: var(--cl-surface-2);
+        color: var(--cl-text-dim);
+        font-weight: 400;
+        cursor: default;
+      }
+    }
+  }
+
+  /* Vertical rhythm for the stack of rows and buttons that fills a window part. */
+  .cl-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cl-gap);
+  }
+
+  .cl-settings-intro {
+    margin: 0 0 4px;
+    color: var(--cl-text-dim);
+    font-size: var(--font-size-12);
+  }
+
+  .cl-settings-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border: 1px solid var(--cl-border);
+    border-radius: var(--cl-radius);
+    background: var(--cl-surface-1);
+
+    .cl-settings-row-text {
+      flex: 1;
+      min-width: 0;
+
+      /* Core gives every heading a bottom border and margin of its own; both are wrong for a
+         row title. */
+      h3 {
+        margin: 0 0 2px;
+        border: none;
+        color: var(--cl-text);
+        font-size: var(--font-size-13);
+        font-weight: 700;
+      }
+
+      p {
+        margin: 0;
+        color: var(--cl-text-dim);
+        font-size: var(--font-size-12);
+      }
+    }
+
+    .cl-button {
+      flex: 0 0 auto;
+    }
+
+    /* Core sizes a number input to fill its container, which in a flex row squeezes the text
+       column to a few characters. */
+    input[type="number"] {
+      flex: 0 0 5em;
+      width: 5em;
+    }
+
+    /* Direct children only: a file-picker's own text input must keep filling the picker. */
+    > input[type="text"] {
+      flex: 0 0 12em;
+      width: 12em;
+    }
+
+    /* A file path or a slider needs the whole width, so it goes under the text. */
+    &.cl-settings-row-wide {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+  }
+
+  /* The committing button first, any secondary action at the far end. */
+  .cl-stack > footer {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--cl-gap);
+  }
+
+  /* An on/off switch in place of core's checkbox. Core paints its checkbox with Font Awesome
+     glyphs in ::before and ::after (foundry2.css), so both are redrawn here as the track and the
+     thumb. It stays a native checkbox, so Space, labels and FormData work unchanged. */
+  input[type="checkbox"].cl-toggle {
+    position: relative;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 18px;
+    margin: 0;
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      font-family: inherit;
+      font-size: 0;
+      line-height: 0;
+    }
+
+    /* Track */
+    &::before {
+      inset: 0;
+      width: auto;
+      height: auto;
+      border: 1px solid var(--cl-border);
+      border-radius: 9px;
+      background: var(--cl-surface-3);
+      transition: background var(--cl-motion) ease;
+    }
+
+    /* Thumb: 3px inset, so it travels the width minus itself minus both insets. */
+    &::after {
+      top: 3px;
+      left: 3px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--cl-text-dim);
+      transition: transform var(--cl-motion) ease;
+    }
+
+    &:checked::before {
+      border-color: var(--cl-accent);
+      background: var(--cl-accent);
+    }
+
+    &:checked::after {
+      transform: translateX(16px);
+      background: var(--cl-accent-ink);
+    }
+
+    &:focus-visible::before {
+      outline: 2px solid var(--cl-focus);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# Unreleased
+# 0.1.0
 
 - [Added] An API for other modules: find free spaces for loot, spawn loot with a shaped flight, and react to pickups. See docs/API.md.
 

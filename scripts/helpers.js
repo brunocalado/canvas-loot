@@ -84,6 +84,92 @@ export function isLootAt(scene, levelId, point) {
 }
 
 /**
+ * Free spaces for loot near a point: each one inside the scene (padding excluded), on the given
+ * Level, with no loot on it, and not behind a wall as seen from `origin`. With `around`, the search
+ * starts at the ring of spaces just outside that rectangle and never returns a space whose centre
+ * is inside it; without it, the ring starts at the origin's own space. Spaces within a ring come in
+ * random order, so repeated calls scatter loot instead of filling one side first. With
+ * order "random", every free space up to maxRings is drawn from alike, so a few items spread over
+ * the whole radius instead of crowding the first ring.
+ * @param {object} args
+ * @param {Scene} args.scene
+ * @param {string} args.levelId
+ * @param {{x: number, y: number}} args.origin       where walls are tested from
+ * @param {{x: number, y: number, width: number, height: number}|null} [args.around]
+ * @param {number} [args.count=1]
+ * @param {number} [args.maxRings=3]
+ * @param {"nearest"|"random"} [args.order="nearest"]
+ * @returns {{x: number, y: number}[]}   space centres, at most `count`; nearest rings first, or
+ *                                       shuffled across all rings with "random"
+ */
+export function findLootSpaces({ scene, levelId, origin, around = null, count = 1, maxRings = 3, order = "nearest" }) {
+  const level = scene?.levels?.get(levelId);
+  if ( !level ) throw new Error(`${MODULE_ID} | findLootSpaces: unknown level`);
+  if ( !["nearest", "random"].includes(order) ) {
+    throw new Error(`${MODULE_ID} | findLootSpaces: order must be "nearest" or "random"`);
+  }
+  const grid = scene.grid;
+  const sceneRect = scene.dimensions.sceneRect;
+  const area = around ? new PIXI.Rectangle(around.x, around.y, around.width, around.height) : null;
+  // The polygon backend reads only x, y and elevation off the origin, so a plain point will do.
+  const from = { x: origin.x, y: origin.y, elevation: level.elevation.base };
+  const isFree = p => sceneRect.contains(p.x, p.y) && !area?.contains(p.x, p.y) && !isLootAt(scene, levelId, p)
+    && !CONFIG.Canvas.polygonBackends.move.testCollision(from, p, { type: "move", mode: "any", level });
+
+  const first = area ? 1 : 0;
+  const found = [];
+  for ( let r = first; r <= maxRings; r++ ) {
+    const ring = shuffle(ringPoints(grid, origin, area, r)).filter(isFree);
+    found.push(...ring);
+    if ( (order === "nearest") && (found.length >= count) ) break;
+  }
+  return (order === "random" ? shuffle(found) : found).slice(0, count);
+}
+
+/**
+ * The candidate points of one search ring. Gridded: the centres of every space at Chebyshev
+ * distance exactly r from the block of spaces `area` covers (or the origin's own space), which is
+ * the same scan the drag preview does. Gridless: points evenly spaced on a circle around the
+ * origin, starting from a random angle.
+ * @param {BaseGrid} grid
+ * @param {{x: number, y: number}} origin
+ * @param {PIXI.Rectangle|null} area
+ * @param {number} r
+ * @returns {{x: number, y: number}[]}
+ */
+function ringPoints(grid, origin, area, r) {
+  if ( grid.isGridless ) {
+    const radius = (area ? Math.hypot(area.width, area.height) / 2 : 0) + (r * grid.size);
+    if ( radius === 0 ) return [{ x: origin.x, y: origin.y }];
+    const n = Math.max(6, Math.round(2 * Math.PI * radius / grid.size));
+    const start = Math.random() * 2 * Math.PI;
+    return Array.fromRange(n).map(k => {
+      const angle = start + (2 * Math.PI * k / n);
+      return { x: origin.x + (radius * Math.cos(angle)), y: origin.y + (radius * Math.sin(angle)) };
+    });
+  }
+  const a = grid.getOffset(area ? { x: area.x, y: area.y } : origin);
+  const b = area ? grid.getOffset({ x: area.right - 1, y: area.bottom - 1 }) : a;
+  const points = [];
+  for ( let i = a.i - r; i <= b.i + r; i++ ) {
+    for ( let j = a.j - r; j <= b.j + r; j++ ) {
+      const d = Math.max(a.i - i, i - b.i, a.j - j, j - b.j);
+      if ( d === r ) points.push(grid.getCenterPoint({ i, j }));
+    }
+  }
+  return points;
+}
+
+/** Shuffle an array in place (Fisher–Yates) and return it. */
+function shuffle(array) {
+  for ( let i = array.length - 1; i > 0; i-- ) {
+    const k = Math.floor(Math.random() * (i + 1));
+    [array[i], array[k]] = [array[k], array[i]];
+  }
+  return array;
+}
+
+/**
  * The Light Sources API, when that module is active and new enough to carry a light with an item.
  * Without it, loot moves no light at all.
  * @returns {object|null}

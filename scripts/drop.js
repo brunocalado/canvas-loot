@@ -7,8 +7,8 @@
  */
 
 import {
-  MODULE_ID, FLAG_ITEM, FLAG_LIGHT, LOOT_SCALE, SETTING_DISABLED_TYPES, SETTING_QUANTITY_PATH, QUERY_DROP,
-  TEMPLATE_CHAT
+  MODULE_ID, FLAG_ITEM, FLAG_LIGHT, FLIGHT_LIMITS, LOOT_SCALE, SETTING_DISABLED_TYPES, SETTING_QUANTITY_PATH,
+  QUERY_DROP, TEMPLATE_CHAT
 } from "./constants.js";
 import { classifyDistance, forgetHistory, getLightSourcesApi, getQuantity, isLootAt, serial } from "./helpers.js";
 
@@ -112,6 +112,34 @@ async function handleDrop(data) {
 }
 
 /**
+ * The Tile a loot item becomes: one grid space (scaled by LOOT_SCALE), centred on its space.
+ * @param {Scene} scene
+ * @param {Level} level
+ * @param {{x: number, y: number}} point
+ * @param {object} snapshot                    the item data the tile keeps
+ * @param {number} elevation
+ * @param {AmbientLightDocument|null} [light]  the light it carries
+ * @returns {object}
+ */
+function lootTileData(scene, level, point, snapshot, elevation, light = null) {
+  const grid = scene.grid;
+  const centre = grid.isGridless ? point : grid.getCenterPoint(grid.getOffset(point));
+  const [width, height] = (grid.isGridless ? [grid.size, grid.size] : [grid.sizeX, grid.sizeY]).map(s => s * LOOT_SCALE);
+  // x and y place the texture anchor, which is the centre by default. The schema wants integers,
+  // and hex grids and gridless drops are fractional.
+  return {
+    texture: { src: snapshot.img },
+    x: Math.round(centre.x),
+    y: Math.round(centre.y),
+    width: Math.round(width),
+    height: Math.round(height),
+    elevation,
+    levels: [level.id],
+    flags: { [MODULE_ID]: light ? { [FLAG_ITEM]: snapshot, [FLAG_LIGHT]: light.id } : { [FLAG_ITEM]: snapshot } }
+  };
+}
+
+/**
  * GM side: create the loot tile and, for an item carried by an actor, remove it from the actor.
  * An item must never end up in both places, nor in neither.
  */
@@ -156,14 +184,12 @@ async function gmDrop({ itemUuid, tokenUuid, levelUuid, x, y, quantity }, user) 
 
   const grid = scene.grid;
   const centre = grid.isGridless ? point : grid.getCenterPoint(grid.getOffset(point));
-  const [width, height] = (grid.isGridless ? [grid.size, grid.size] : [grid.sizeX, grid.sizeY]).map(s => s * LOOT_SCALE);
   // A snapshot rather than the item's uuid: a move deletes the source, and a directory item can be
   // edited or deleted after the drop.
   const snapshot = item.toObject();
   for ( const key of ["_id", "folder", "sort", "ownership"] ) delete snapshot[key];
   if ( moved < stack ) foundry.utils.setProperty(snapshot, path, moved);
-  // x and y place the texture anchor, which is the centre by default. The schema wants integers,
-  // and hex grids and gridless drops are fractional.
+  // The light stands where lootTileData will centre the tile, rounded the same way.
   const x0 = Math.round(centre.x);
   const y0 = Math.round(centre.y);
   const elevation = token?.elevation ?? level.elevation.base;
@@ -193,16 +219,7 @@ async function gmDrop({ itemUuid, tokenUuid, levelUuid, x, y, quantity }, user) 
 
   let tile;
   try {
-    [tile] = await scene.createEmbeddedDocuments("Tile", [{
-      texture: { src: item.img },
-      x: x0,
-      y: y0,
-      width: Math.round(width),
-      height: Math.round(height),
-      elevation,
-      levels: [level.id],
-      flags: { [MODULE_ID]: light ? { [FLAG_ITEM]: snapshot, [FLAG_LIGHT]: light.id } : { [FLAG_ITEM]: snapshot } }
-    }], {
+    [tile] = await scene.createEmbeddedDocuments("Tile", [lootTileData(scene, level, point, snapshot, elevation, light)], {
       // Reaches every client's createTile hook without being stored, so each can fly the item in
       // from the token; see loot-control.js.
       [MODULE_ID]: (kind === "place") ? undefined : { from: token.getCenterPoint(), thrown: kind === "throw" }
@@ -241,6 +258,77 @@ async function gmDrop({ itemUuid, tokenUuid, levelUuid, x, y, quantity }, user) 
   await ChatMessage.implementation.create({
     speaker, content, whisper: placed ? ChatMessage.implementation.getWhisperRecipients("GM").map(u => u.id) : []
   });
+}
+
+/**
+ * Create a loot tile from item data, on the active GM. Runs in the same queue as drops and
+ * pickups, so it can't land on a space a simultaneous drop just took: the space is re-checked here,
+ * and a taken space returns null rather than throwing, so the caller can try its next one.
+ * @param {object} args
+ * @param {Scene} args.scene
+ * @param {string} args.levelId
+ * @param {{x: number, y: number}} args.point
+ * @param {object} args.itemData             Item source data (Item#toObject()); copied, never kept
+ * @param {{x: number, y: number}|null} [args.from]   where the item flies in from, on every client
+ * @param {boolean} [args.thrown=false]      play the throw sound with the flight
+ * @param {object} [args.flight]             the flight's shape; ignored without `from`
+ * @param {number} [args.flight.delay=0]     seconds the item stays hidden before it leaves `from`
+ * @param {number} [args.flight.arc=0]       least apex height in grid spaces; the apex is the
+ *                                           larger of this and 0.2 × the flight's length
+ * @param {number} [args.flight.startScale=1]  image size as it leaves `from`, × its fitted size
+ * @param {number} [args.flight.apexScale=1.4] image size at the apex; it always lands at 1
+ * @param {boolean} [args.chat=true]         whisper the GMs a "placed" card
+ * @returns {Promise<TileDocument|null>}     null when the space already holds loot
+ */
+export function spawnLoot(args) {
+  return serial(() => gmSpawn(args));
+}
+
+async function gmSpawn({ scene, levelId, point, itemData, from = null, thrown = false, flight = {}, chat = true } = {}) {
+  // The queue that keeps two spawns, or a spawn and a drop, off one space exists on this client alone.
+  if ( !game.user.isActiveGM ) throw new Error(`${MODULE_ID} | spawnLoot runs on the active GM only.`);
+  const fail = reason => new Error(`${MODULE_ID} | spawnLoot: ${reason}`);
+  if ( scene?.documentName !== "Scene" ) throw fail("scene must be a Scene.");
+  const level = scene.levels.get(levelId);
+  if ( !level ) throw fail("unknown level.");
+  if ( !Number.isFinite(point?.x) || !Number.isFinite(point?.y) || !scene.dimensions.sceneRect.contains(point.x, point.y) ) {
+    throw fail("point must lie inside the scene.");
+  }
+  if ( (typeof itemData?.name !== "string") || !game.documentTypes.Item.includes(itemData.type) ) {
+    throw fail("itemData must be Item data with a name and a valid type.");
+  }
+  if ( (from !== null) && (!Number.isFinite(from?.x) || !Number.isFinite(from?.y)) ) throw fail("from must be a point.");
+  if ( (typeof flight !== "object") || (flight === null) ) throw fail("flight must be an object.");
+  for ( const [key, value] of Object.entries(flight) ) {
+    const limits = FLIGHT_LIMITS[key];
+    if ( !limits ) throw fail(`unknown flight option ${key}.`);
+    if ( !Number.isFinite(value) || (value < limits.min) || (value > limits.max) ) {
+      throw fail(`flight.${key} must be a number from ${limits.min} to ${limits.max}.`);
+    }
+  }
+
+  if ( isLootAt(scene, level.id, point) ) return null;
+  const snapshot = foundry.utils.deepClone(itemData);
+  for ( const key of ["_id", "folder", "sort", "ownership"] ) delete snapshot[key];
+  const [tile] = await scene.createEmbeddedDocuments("Tile", [lootTileData(scene, level, point, snapshot, level.elevation.base)], {
+    // Read by every client's createTile hook, as for a drop; see loot-control.js.
+    [MODULE_ID]: from ? { from: { x: from.x, y: from.y }, thrown: !!thrown, ...flight } : undefined
+  });
+  if ( !tile ) throw fail("the loot tile could not be created.");
+  forgetHistory(tile);
+
+  // Told to the GMs alone, like loot a GM places by hand.
+  if ( chat ) {
+    const speaker = { scene: scene.id, alias: game.user.name };
+    const content = await foundry.applications.handlebars.renderTemplate(TEMPLATE_CHAT, {
+      event: "place", ...CHAT.place, actorName: speaker.alias, item: { name: snapshot.name, img: snapshot.img },
+      tileUuid: tile.uuid
+    });
+    await ChatMessage.implementation.create({
+      speaker, content, whisper: ChatMessage.implementation.getWhisperRecipients("GM").map(u => u.id)
+    });
+  }
+  return tile;
 }
 
 /**

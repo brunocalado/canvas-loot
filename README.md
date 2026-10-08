@@ -135,6 +135,13 @@ whole until you tell **Droppable items** which field holds the quantity.
 
 ---
 
+# 🔌 For developers
+
+Modules, systems and macros can put loot on the map too, with free spaces found for them and a
+flight of their own. 👉 **[Read the API documentation](docs/API.md)**
+
+---
+
 # 📦 Installation
 
 Requires Foundry VTT v14. Install via the Foundry VTT Module browser or use this manifest link:

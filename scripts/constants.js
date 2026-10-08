@@ -31,6 +31,14 @@ export const LOOT_SCALE = 0.8;
 export const SETTING_QUANTITY_PATH = "quantityPath";
 export const SETTING_HIGHLIGHT = "highlight";
 
+/** Range and default of each flight option a spawn may pass: seconds, grid spaces, and scales. */
+export const FLIGHT_LIMITS = {
+  delay: { min: 0, max: 5, default: 0 },
+  arc: { min: 0, max: 10, default: 0 },
+  startScale: { min: 0, max: 3, default: 1 },
+  apexScale: { min: 0.1, max: 3, default: 1.4 }
+};
+
 /**
  * Defaults for known systems, keyed by system id: the Item types that start droppable, and the path
  * of an item's stack size ("" when the system has none). Only physical, non-container types are

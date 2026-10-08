@@ -7,8 +7,8 @@
  */
 
 import {
-  MODULE_ID, FLAG_ITEM, FLAG_LIGHT, SETTING_HIGHLIGHT, SETTING_PICKUP_SOUND, SETTING_PICKUP_VOLUME,
-  SETTING_THROW_SOUND, SETTING_THROW_VOLUME
+  MODULE_ID, FLAG_ITEM, FLAG_LIGHT, FLIGHT_LIMITS, SETTING_HIGHLIGHT, SETTING_PICKUP_SOUND,
+  SETTING_PICKUP_VOLUME, SETTING_THROW_SOUND, SETTING_THROW_VOLUME
 } from "./constants.js";
 import { forgetHistory } from "./helpers.js";
 import { requestPickup } from "./pickup.js";
@@ -133,10 +133,10 @@ export class LootControl extends PIXI.Container {
 
   /**
    * Fly the tile's image in from a point, hiding the overlay until it lands; animateFlight moves it.
-   * @param {{x: number, y: number}} from
+   * @param {{from: {x: number, y: number}, delay: number, arc: number, startScale: number, apexScale: number}} flight
    */
-  fly(from) {
-    this.flight = { from, start: null };
+  fly(flight) {
+    this.flight = { ...flight, start: null };
     this.alpha = 0;
   }
 
@@ -183,7 +183,7 @@ let container = null;
 /** LootControl instances keyed by tile document id. */
 const controls = new Map();
 
-/** Flight origins announced by createTile before the tile is drawn, keyed by tile document id. */
+/** Flights announced by createTile before the tile is drawn, keyed by tile document id. */
 const pendingFlights = new Map();
 
 function isLoot(tile) {
@@ -195,10 +195,10 @@ function addControl(tile) {
   const control = new LootControl(tile);
   controls.set(tile.id, control);
   container.addChild(control.draw());
-  const from = pendingFlights.get(tile.id);
-  if ( from ) {
+  const flight = pendingFlights.get(tile.id);
+  if ( flight ) {
     pendingFlights.delete(tile.id);
-    control.fly(from);
+    control.fly(flight);
   }
 }
 
@@ -218,7 +218,8 @@ export function refreshHighlights() {
  * Move a flying tile's mesh one frame along a parabola from its origin to where core laid it out.
  * Seen from above, a throw along the screen's vertical would show no arc, so the image also grows
  * toward the apex. The flight gets longer and higher with distance, and ends with the mesh and
- * overlay restored.
+ * overlay restored. A spawn can delay it, raise its apex, and set the image's size at take-off and
+ * at the apex; it always lands at its fitted size. With the defaults this is the drop's flight.
  * @param {LootControl} control
  * @param {number} now   seconds
  */
@@ -227,6 +228,11 @@ function animateFlight(control, now) {
   if ( !mesh || mesh.destroyed ) return;
   const flight = control.flight;
   flight.start ??= now;
+  // renderable rather than alpha or visible: core rewrites those whenever the tile refreshes, as a
+  // hover does, but never touches renderable on a tile's mesh.
+  const t = now - flight.start - flight.delay;
+  mesh.renderable = t >= 0;
+  if ( t < 0 ) return;
   // Core's fit, re-read whenever core has set the scale since the last frame: the first frames can
   // come before the texture is fitted.
   if ( mesh.scale.x !== flight.lastScale ) flight.scale = { x: mesh.scale.x, y: mesh.scale.y };
@@ -235,7 +241,7 @@ function animateFlight(control, now) {
   const dy = y - flight.from.y;
   const length = Math.hypot(dx, dy);
   const duration = Math.min(0.3 + (0.06 * length / canvas.dimensions.size), 0.9);
-  const u = Math.min((now - flight.start) / duration, 1);
+  const u = Math.min(t / duration, 1);
   if ( u >= 1 ) {
     control.flight = null;
     control.alpha = 1;
@@ -244,8 +250,14 @@ function animateFlight(control, now) {
     return;
   }
   const height = 4 * u * (1 - u);
-  mesh.position.set(flight.from.x + (dx * u), flight.from.y + (dy * u) - (0.2 * length * height));
-  mesh.scale.set(flight.scale.x * (1 + (0.4 * height)), flight.scale.y * (1 + (0.4 * height)));
+  const lift = Math.max(0.2 * length, flight.arc * canvas.dimensions.size) * height;
+  // startScale at take-off, apexScale at the top, 1 on landing. Each half eases on the same curve
+  // as the lift, so the size peaks exactly at the apex; one parabola through all three would
+  // overshoot apexScale whenever startScale isn't 1.
+  const base = (u < 0.5) ? flight.startScale : 1;
+  const s = base + ((flight.apexScale - base) * height);
+  mesh.position.set(flight.from.x + (dx * u), flight.from.y + (dy * u) - lift);
+  mesh.scale.set(flight.scale.x * s, flight.scale.y * s);
   flight.lastScale = mesh.scale.x;
 }
 
@@ -377,15 +389,22 @@ export function registerLootControls() {
   Hooks.on("drawTile", tile => {
     if ( canvas.ready && container && !tile.isPreview && isLoot(tile) ) addControl(tile);
   });
-  // A drop or a throw passes its token's centre as a creation option, which every client receives.
-  // The tile is drawn after this hook, so its control usually picks the flight up in addControl.
+  // A drop or a throw passes its token's centre as a creation option, which every client receives;
+  // a spawn may add the flight's shape. The tile is drawn after this hook, so its control usually
+  // picks the flight up in addControl.
   Hooks.on("createTile", (tileDoc, options) => {
-    const from = options[MODULE_ID]?.from;
+    const option = options[MODULE_ID];
+    const from = option?.from;
     if ( (tileDoc.parent !== canvas.scene) || !Number.isFinite(from?.x) || !Number.isFinite(from?.y) ) return;
+    // Clamped here too: any client allowed to create tiles can send creation options.
+    const flight = { from: { x: from.x, y: from.y } };
+    for ( const [key, { min, max, default: fallback }] of Object.entries(FLIGHT_LIMITS) ) {
+      flight[key] = Number.isFinite(option[key]) ? Math.clamp(option[key], min, max) : fallback;
+    }
     const control = controls.get(tileDoc.id);
-    if ( control ) control.fly({ x: from.x, y: from.y });
-    else pendingFlights.set(tileDoc.id, { x: from.x, y: from.y });
-    if ( options[MODULE_ID].thrown ) playSound(SETTING_THROW_SOUND, SETTING_THROW_VOLUME);
+    if ( control ) control.fly(flight);
+    else pendingFlights.set(tileDoc.id, flight);
+    if ( option.thrown ) playSound(SETTING_THROW_SOUND, SETTING_THROW_VOLUME);
   });
   // A pickup marks its deletion the same way; a GM deleting the tile on the Tiles layer plays nothing.
   Hooks.on("deleteTile", (tileDoc, options) => {

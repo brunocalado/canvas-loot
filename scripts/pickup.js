@@ -136,6 +136,9 @@ async function gmPickup({ tileUuid, tokenUuid }, user) {
     actorName: speaker.alias, item: { name: item.name, img: item.img }
   });
   await ChatMessage.implementation.create({ speaker, content });
+  // After the item reached the actor and the tile is gone, on the active GM only: the one client
+  // that knows which item it became, and the one a listener that writes documents should run on.
+  Hooks.callAll(`${MODULE_ID}.pickup`, token, item, { tile, snapshot, user, merged: !!stack });
   return { light: lightReason };
 }
 

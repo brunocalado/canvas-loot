@@ -18,6 +18,7 @@ import { registerDropPreview } from "./drop-preview.js";
 import { registerPickup } from "./pickup.js";
 import { ItemTypesConfig } from "./item-types-config.js";
 import { ThrowConfig } from "./throw-config.js";
+import { api } from "./api.js";
 
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | init`);
@@ -69,4 +70,10 @@ Hooks.once("init", () => {
     name: "Throwing and sounds", label: "Configure", icon: "fa-solid fa-person-basketball",
     type: ThrowConfig, restricted: true
   });
+
+  game.modules.get(MODULE_ID).api = api;
+  globalThis.CanvasLoot = api;
 });
+
+// Lets a module that loads before this one learn when the API can be used, whatever the load order.
+Hooks.once("ready", () => Hooks.callAll(`${MODULE_ID}.ready`, api));

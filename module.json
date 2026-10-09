@@ -2,7 +2,7 @@
   "id": "canvas-loot",
   "title": "Canvas Loot",
   "description": "Drop, throw and pick up items as tiles on the canvas, in any system.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   
   "authors": [
     {

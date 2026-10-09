@@ -1,4 +1,4 @@
-# Unreleased
+# 0.2.0
 
 - [Added] API: findLootSpaces takes an `avoid` list of rectangles, and skips any space where the loot would cover one of them.
 

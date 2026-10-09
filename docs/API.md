@@ -82,7 +82,9 @@ Without a path, every unit is a tile of its own.
 ### `findLootSpaces(args)` → `{x, y}[]`
 
 Free spaces for loot near a point. A space is free when its centre is inside the scene (the padding
-doesn't count), no loot lies on it on that Level, and no wall stands between it and `origin`.
+doesn't count), no loot lies on it on that Level, no token stands on it on that Level, and no wall
+stands between it and `origin`. Any part of a token counts, whatever its size, and so do hidden
+tokens and tokens at another elevation, since they still cover the item on the canvas.
 
 | Argument | Type | Default | |
 |---|---|---|---|

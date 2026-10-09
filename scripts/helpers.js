@@ -84,13 +84,47 @@ export function isLootAt(scene, levelId, point) {
 }
 
 /**
+ * A test for whether a token on this Level stands where loot at a point would lie: on one of the
+ * token's spaces on a grid, or overlapping its rectangle on a gridless scene. Neither elevation nor
+ * hidden counts: a flying token still covers the item on the canvas, and a hidden one would cover it
+ * once revealed. Only tokens reaching into `near` are read, since each one's spaces cost a sweep.
+ * @param {Scene} scene
+ * @param {string} levelId
+ * @param {PIXI.Rectangle} near
+ * @returns {(point: {x: number, y: number}) => boolean}
+ */
+function tokenOccupancy(scene, levelId, near) {
+  const grid = scene.grid;
+  // The token's own level, not includedInLevel: that also takes in tokens on Levels visible from this one.
+  const tokens = scene.tokens.filter(t => {
+    if ( t.level !== levelId ) return false;
+    const { width, height } = t.getSize();
+    return near.intersects(new PIXI.Rectangle(t.x, t.y, width, height));
+  });
+  if ( grid.isGridless ) {
+    const size = grid.size * LOOT_SCALE;
+    const rects = tokens.map(t => ({ ...t.getCenterPoint(), ...t.getSize() }));
+    return p => rects.some(r => (Math.abs(r.x - p.x) < ((r.width + size) / 2)) && (Math.abs(r.y - p.y) < ((r.height + size) / 2)));
+  }
+  // Core's own footprint: half sizes, hex shapes and walls through the token are already handled.
+  const spaces = new Set();
+  for ( const t of tokens ) {
+    for ( const { i, j } of t.getOccupiedGridSpaceOffsets() ) spaces.add(`${i},${j}`);
+  }
+  return p => {
+    const { i, j } = grid.getOffset(p);
+    return spaces.has(`${i},${j}`);
+  };
+}
+
+/**
  * Free spaces for loot near a point: each one inside the scene (padding excluded), on the given
- * Level, with no loot on it, and not behind a wall as seen from `origin`. With `around`, the search
- * starts at the ring of spaces just outside that rectangle and never returns a space whose centre
- * is inside it; without it, the ring starts at the origin's own space. Spaces within a ring come in
- * random order, so repeated calls scatter loot instead of filling one side first. With
- * order "random", every free space up to maxRings is drawn from alike, so a few items spread over
- * the whole radius instead of crowding the first ring.
+ * Level, with no loot or token on it, and not behind a wall as seen from `origin`. With `around`,
+ * the search starts at the ring of spaces just outside that rectangle and never returns a space
+ * whose centre is inside it; without it, the ring starts at the origin's own space. Spaces within
+ * a ring come in random order, so repeated calls scatter loot instead of filling one side first.
+ * With order "random", every free space up to maxRings is drawn from alike, so a few items spread
+ * over the whole radius instead of crowding the first ring.
  * @param {object} args
  * @param {Scene} args.scene
  * @param {string} args.levelId
@@ -113,8 +147,13 @@ export function findLootSpaces({ scene, levelId, origin, around = null, count = 
   const area = around ? new PIXI.Rectangle(around.x, around.y, around.width, around.height) : null;
   // The polygon backend reads only x, y and elevation off the origin, so a plain point will do.
   const from = { x: origin.x, y: origin.y, elevation: level.elevation.base };
+  // Everything the farthest ring can reach, with a space to spare for loot and grid rounding.
+  const reach = (maxRings + 1) * Math.max(grid.sizeX, grid.sizeY);
+  const near = (grid.isGridless || !area) ? new PIXI.Rectangle(origin.x, origin.y, 0, 0) : area.clone();
+  near.pad(reach + ((grid.isGridless && area) ? Math.hypot(area.width, area.height) / 2 : 0));
+  const isTokenAt = tokenOccupancy(scene, levelId, near);
   const isFree = p => sceneRect.contains(p.x, p.y) && !area?.contains(p.x, p.y) && !isLootAt(scene, levelId, p)
-    && !CONFIG.Canvas.polygonBackends.move.testCollision(from, p, { type: "move", mode: "any", level });
+    && !isTokenAt(p) && !CONFIG.Canvas.polygonBackends.move.testCollision(from, p, { type: "move", mode: "any", level });
 
   const first = area ? 1 : 0;
   const found = [];

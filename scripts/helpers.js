@@ -124,7 +124,8 @@ function tokenOccupancy(scene, levelId, near) {
  * whose centre is inside it; without it, the ring starts at the origin's own space. Spaces within
  * a ring come in random order, so repeated calls scatter loot instead of filling one side first.
  * With order "random", every free space up to maxRings is drawn from alike, so a few items spread
- * over the whole radius instead of crowding the first ring.
+ * over the whole radius instead of crowding the first ring. A space is also skipped when the loot
+ * tile placed there would overlap one of the `avoid` rectangles; touching an edge doesn't count.
  * @param {object} args
  * @param {Scene} args.scene
  * @param {string} args.levelId
@@ -133,14 +134,20 @@ function tokenOccupancy(scene, levelId, near) {
  * @param {number} [args.count=1]
  * @param {number} [args.maxRings=3]
  * @param {"nearest"|"random"} [args.order="nearest"]
+ * @param {{x: number, y: number, width: number, height: number}[]} [args.avoid=[]]   canvas areas
+ *                                       loot must not cover, such as another module's marker
  * @returns {{x: number, y: number}[]}   space centres, at most `count`; nearest rings first, or
  *                                       shuffled across all rings with "random"
  */
-export function findLootSpaces({ scene, levelId, origin, around = null, count = 1, maxRings = 3, order = "nearest" }) {
+export function findLootSpaces({ scene, levelId, origin, around = null, count = 1, maxRings = 3, order = "nearest", avoid = [] }) {
   const level = scene?.levels?.get(levelId);
   if ( !level ) throw new Error(`${MODULE_ID} | findLootSpaces: unknown level`);
   if ( !["nearest", "random"].includes(order) ) {
     throw new Error(`${MODULE_ID} | findLootSpaces: order must be "nearest" or "random"`);
+  }
+  const isRect = r => ["x", "y", "width", "height"].every(k => Number.isFinite(r?.[k])) && (r.width >= 0) && (r.height >= 0);
+  if ( !Array.isArray(avoid) || !avoid.every(isRect) ) {
+    throw new Error(`${MODULE_ID} | findLootSpaces: avoid must be an array of {x, y, width, height} with finite numbers and no negative size`);
   }
   const grid = scene.grid;
   const sceneRect = scene.dimensions.sceneRect;
@@ -152,7 +159,13 @@ export function findLootSpaces({ scene, levelId, origin, around = null, count = 
   const near = (grid.isGridless || !area) ? new PIXI.Rectangle(origin.x, origin.y, 0, 0) : area.clone();
   near.pad(reach + ((grid.isGridless && area) ? Math.hypot(area.width, area.height) / 2 : 0));
   const isTokenAt = tokenOccupancy(scene, levelId, near);
-  const isFree = p => sceneRect.contains(p.x, p.y) && !area?.contains(p.x, p.y) && !isLootAt(scene, levelId, p)
+  // Tested against the loot tile's own footprint, the size lootTileData gives it, rather than the
+  // whole space: that is what would cover the avoided area, and on a hex grid a space's bounding box
+  // spills into its neighbours. PIXI's intersects is strict, so a shared edge is not an overlap.
+  const [lootWidth, lootHeight] = (grid.isGridless ? [grid.size, grid.size] : [grid.sizeX, grid.sizeY]).map(s => s * LOOT_SCALE);
+  const avoided = avoid.map(r => new PIXI.Rectangle(r.x, r.y, r.width, r.height));
+  const isAvoided = p => avoided.some(r => r.intersects(new PIXI.Rectangle(p.x - (lootWidth / 2), p.y - (lootHeight / 2), lootWidth, lootHeight)));
+  const isFree = p => sceneRect.contains(p.x, p.y) && !area?.contains(p.x, p.y) && !isAvoided(p) && !isLootAt(scene, levelId, p)
     && !isTokenAt(p) && !CONFIG.Canvas.polygonBackends.move.testCollision(from, p, { type: "move", mode: "any", level });
 
   const first = area ? 1 : 0;

@@ -89,12 +89,29 @@ tokens and tokens at another elevation, since they still cover the item on the c
 | `count` | `number` | `1` | How many spaces to return, at most. |
 | `maxRings` | `number` | `3` | How far to look, in rings of spaces. |
 | `order` | `"nearest"` or `"random"` | `"nearest"` | `"nearest"` fills the closest ring first. `"random"` draws from every ring up to `maxRings` alike, so a few items spread over the whole area instead of crowding the first ring. |
+| `avoid` | `{x, y, width, height}[]` | `[]` | Areas of the canvas the loot must not cover, such as a marker your module draws. A space is skipped when the loot tile on it would overlap one of them; only touching an edge doesn't count. Pad a rectangle to keep a gap around it. |
 
 Returns the centres of the free spaces, at most `count` of them, or `[]` when none fits. Within a
 ring the order is random, so two calls don't fill the same side first. On a gridless scene the rings
 are circles one grid size apart.
 
-Throws when the Level doesn't exist, or for an unknown `order`.
+Keep loot off a button you draw in the middle of a region, while still letting it land inside the
+region:
+
+```js
+const size = 60;   // the button's size on the canvas, in pixels
+const { x, y } = region.bounds.center;
+const points = CanvasLoot.findLootSpaces({
+  scene, levelId, origin, around: token.object.bounds, count: 3,
+  avoid: [{ x: x - (size / 2), y: y - (size / 2), width: size, height: size }]
+});
+```
+
+The rectangles are in canvas coordinates. A marker drawn at a fixed size on screen changes size on
+the canvas with the zoom, so pass the size it has on the canvas, the same for every client.
+
+Throws when the Level doesn't exist, for an unknown `order`, or when `avoid` isn't an array of
+rectangles with finite numbers and no negative size.
 
 ### `spawnLoot(args)` → `Promise<TileDocument|null>` *(active GM only)*
 

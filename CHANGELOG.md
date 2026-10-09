@@ -1,3 +1,7 @@
+# 0.1.1
+
+- [Changed] API: findLootSpaces no longer returns a space where a token stands on that Level, whatever its size, elevation or visibility. spawnLoot still places loot wherever it is sent.
+
 # 0.1.0
 
 - [Added] An API for other modules: find free spaces for loot, spawn loot with a shaped flight, and react to pickups. See docs/API.md.

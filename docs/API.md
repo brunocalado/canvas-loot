@@ -3,7 +3,7 @@
 Put loot on the ground from your own module, system or macro. The items you spawn are ordinary
 Canvas Loot: they sparkle, a player picks them up with a click, and stacks merge on the sheet.
 Canvas Loot keeps its rule of one item per space and finds free spaces for you, so your loot never
-lands on top of a player's drop.
+lands on top of a player's drop or under a token.
 
 The API is available as `CanvasLoot` and as `game.modules.get("canvas-loot").api`.
 
@@ -14,8 +14,6 @@ The API is available as `CanvasLoot` and as `game.modules.get("canvas-loot").api
 - [Races](#races)
 - [Hooks](#hooks)
 - [Depending on Canvas Loot](#depending-on-canvas-loot)
-
----
 
 ## Quick start
 
@@ -40,8 +38,6 @@ await CanvasLoot.spawnLoot({
 });
 ```
 
----
-
 ## When to call
 
 The API exists from Canvas Loot's `init`. Call it from a **`ready`** hook or later, or wait for
@@ -61,8 +57,6 @@ only** (`game.user.isActiveGM`); anywhere else it rejects. Players can't create 
 that keeps two items off one space lives on that client. When a player's action should make loot,
 send it to the GM yourself, with a query or a socket, check it there, and call `spawnLoot` on the
 GM's side.
-
----
 
 ## Reference
 
@@ -117,10 +111,11 @@ Creates one loot tile from item data.
 | `flight` | `object` | `{}` | The flight's shape. See [The flight](#the-flight). Ignored without `from`. |
 | `chat` | `boolean` | `true` | Whisper the GMs a "placed" card that pans to the tile. |
 
+It places the item at `point` even when a token stands there: only `findLootSpaces` keeps loot
+off tokens, so a point you choose yourself is yours to choose.
+
 Returns the new tile, or **`null` when that space already holds loot**. See [Races](#races).
 Rejects for wrong arguments, a `flight` value out of range, or a client that isn't the active GM.
-
----
 
 ## The flight
 
@@ -152,8 +147,6 @@ for ( const [i, point] of points.entries() ) {
 }
 ```
 
----
-
 ## Races
 
 A player can drop an item on the space you are about to fill. `spawnLoot` runs in the same queue as
@@ -173,7 +166,10 @@ for ( const itemData of units ) {
 
 Ask for a few more spaces than you need, so a taken one doesn't leave an item without a place.
 
----
+Tokens are not checked again. `findLootSpaces` sees where tokens stand when you call it, and
+`spawnLoot` places the item wherever you send it. To keep loot off tokens, call `findLootSpaces`
+right before `spawnLoot`, with no roll, dialog or other `await` between them, so a token has no
+time to move into the space.
 
 ## Hooks
 
@@ -195,8 +191,6 @@ Hooks.on("canvas-loot.pickup", (token, item, { snapshot }) => {
   if ( snapshot.flags?.["my-module"]?.questItem ) ChatMessage.create({ content: `${foundry.utils.escapeHTML(token.name)} found it!` });
 });
 ```
-
----
 
 ## Depending on Canvas Loot
 

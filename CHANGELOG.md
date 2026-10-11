@@ -1,3 +1,11 @@
+# 0.3.0
+
+- [Added] API: the `canvas-loot.preChatMessage` hook lets a system or module restyle or cancel every loot chat card before it is posted. See "Chat messages" in docs/API.md.
+- [Added] Loot chat messages carry what happened as data in their flags: the event, who acted, the item with its quantity, the tile, and a throw's distance.
+- [Added] Chat cards show how many items a stack held, such as "picked up 5 × Torch".
+- [Changed] The "Show on the map" click follows a `data-canvas-loot-show` attribute, so a card that replaces ours chooses where it goes. Cards posted before this version no longer pan to their loot.
+- [Fixed] A token standing next to loot could be told "Your token cannot reach that item" while the GM's window was in the background: reach was measured from where the token's move animation had got to on the GM's client, not from where the token stood.
+
 # 0.2.0
 
 - [Added] API: findLootSpaces takes an `avoid` list of rectangles, and skips any space where the loot would cover one of them.

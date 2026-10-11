@@ -95,7 +95,7 @@ function drawRings() {
   // Checked at the token's own centre, which is always in reach: a refusal there is about the item
   // or the token, and the label under the cursor gives its reason instead.
   try {
-    if ( checkDrop(dragged, token, token?.getCenterPoint() ?? { x: 0, y: 0 }, game.user).kind === "place" ) return;
+    if ( checkDrop(dragged, token, token?.getCenterPoint(token._source) ?? { x: 0, y: 0 }, game.user).kind === "place" ) return;
   } catch {
     return;
   }
@@ -106,9 +106,11 @@ function drawRings() {
   const s = canvas.dimensions.uiScale;
 
   if ( grid.isGridless ) {
-    const { width, height } = token.getSize();
+    // From where the token stands, as distanceClassifier measures, even while it still animates there.
+    const { x, y } = token._source;
+    const { width, height } = token.getSize(token._source);
     const range = throwRange();
-    const grow = r => new PIXI.RoundedRectangle(token.x - r, token.y - r, width + (2 * r), height + (2 * r), r);
+    const grow = r => new PIXI.RoundedRectangle(x - r, y - r, width + (2 * r), height + (2 * r), r);
     const throwArea = grow(range * grid.size);
     const dropArea = grow(grid.size);
     if ( range > 1 ) {
@@ -121,7 +123,7 @@ function drawRings() {
   }
 
   const reach = throwRange() + 1;
-  const occupied = token.getOccupiedGridSpaceOffsets();
+  const occupied = token.getOccupiedGridSpaceOffsets(token._source);
   const is = occupied.map(o => o.i);
   const js = occupied.map(o => o.j);
   const rect = canvas.dimensions.rect;

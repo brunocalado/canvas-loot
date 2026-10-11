@@ -96,20 +96,22 @@ export function isLootAt(scene, levelId, point) {
 function tokenOccupancy(scene, levelId, near) {
   const grid = scene.grid;
   // The token's own level, not includedInLevel: that also takes in tokens on Levels visible from this one.
+  // Where each token stands, not where its animation has got to; see distanceClassifier.
   const tokens = scene.tokens.filter(t => {
     if ( t.level !== levelId ) return false;
-    const { width, height } = t.getSize();
-    return near.intersects(new PIXI.Rectangle(t.x, t.y, width, height));
+    const { x, y } = t._source;
+    const { width, height } = t.getSize(t._source);
+    return near.intersects(new PIXI.Rectangle(x, y, width, height));
   });
   if ( grid.isGridless ) {
     const size = grid.size * LOOT_SCALE;
-    const rects = tokens.map(t => ({ ...t.getCenterPoint(), ...t.getSize() }));
+    const rects = tokens.map(t => ({ ...t.getCenterPoint(t._source), ...t.getSize(t._source) }));
     return p => rects.some(r => (Math.abs(r.x - p.x) < ((r.width + size) / 2)) && (Math.abs(r.y - p.y) < ((r.height + size) / 2)));
   }
   // Core's own footprint: half sizes, hex shapes and walls through the token are already handled.
   const spaces = new Set();
   for ( const t of tokens ) {
-    for ( const { i, j } of t.getOccupiedGridSpaceOffsets() ) spaces.add(`${i},${j}`);
+    for ( const { i, j } of t.getOccupiedGridSpaceOffsets(t._source) ) spaces.add(`${i},${j}`);
   }
   return p => {
     const { i, j } = grid.getOffset(p);
@@ -258,27 +260,31 @@ export function distanceClassifier(tokenDoc) {
   const grid = scene.grid;
   const range = game.settings.get(MODULE_ID, SETTING_THROW_ENABLED)
     ? game.settings.get(MODULE_ID, SETTING_THROW_RANGE) : 0;
-  const { width, height } = tokenDoc.getSize();
+  // While a token animates, its prepared x, y, elevation, width and height follow the animation and
+  // only the source holds where it stands. The animation stalls on a client whose window is in the
+  // background, so a GM's client out of sight would measure from where the token set out.
+  const source = tokenDoc._source;
+  const { width, height } = tokenDoc.getSize(source);
   // Occupied offsets are 3D, one per elevation step. testAdjacency returns false when only one
   // side has a k, so they are flattened to the 2D offsets the drop point has.
   const spaces = new Map();
   if ( !grid.isGridless ) {
-    for ( const { i, j } of tokenDoc.getOccupiedGridSpaceOffsets() ) spaces.set(`${i}.${j}`, { i, j });
+    for ( const { i, j } of tokenDoc.getOccupiedGridSpaceOffsets(source) ) spaces.set(`${i}.${j}`, { i, j });
   }
   const offsets = [...spaces.values()];
   const centres = offsets.map(o => grid.getCenterPoint(o));
   // Token#checkCollision needs the placeable, which exists only on a client viewing the scene.
   // The polygon backend works from the Level's edges instead, which core builds on demand.
   const level = scene.levels.get(tokenDoc.level);
-  const origin = tokenDoc.getMovementOrigin();
+  const origin = tokenDoc.getMovementOrigin(source);
 
   return point => {
     let kind;
     let distance;
     let landing = point;
     if ( grid.isGridless ) {
-      const dx = Math.max(tokenDoc.x - point.x, 0, point.x - (tokenDoc.x + width));
-      const dy = Math.max(tokenDoc.y - point.y, 0, point.y - (tokenDoc.y + height));
+      const dx = Math.max(source.x - point.x, 0, point.x - (source.x + width));
+      const dy = Math.max(source.y - point.y, 0, point.y - (source.y + height));
       const gap = Math.hypot(dx, dy) / grid.size;
       kind = (gap <= 1) ? "adjacent" : ((gap <= range) ? "throw" : "out");
       distance = gap * grid.distance;

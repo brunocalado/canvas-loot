@@ -187,7 +187,8 @@ async function gmDrop({ itemUuid, tokenUuid, levelUuid, x, y, quantity }, user) 
   // The light stands where lootTileData will centre the tile, rounded the same way.
   const x0 = Math.round(centre.x);
   const y0 = Math.round(centre.y);
-  const elevation = token?.elevation ?? level.elevation.base;
+  // The source, as in distanceClassifier: this GM may still be animating the token's last move.
+  const elevation = token?._source.elevation ?? level.elevation.base;
 
   // A lit lantern takes its light along. Light Sources decides whether the leaving item is the light
   // and reads that off the actor, so this runs while the item is still there, and before the tile,
@@ -217,7 +218,7 @@ async function gmDrop({ itemUuid, tokenUuid, levelUuid, x, y, quantity }, user) 
     [tile] = await scene.createEmbeddedDocuments("Tile", [lootTileData(scene, level, point, snapshot, elevation, light)], {
       // Reaches every client's createTile hook without being stored, so each can fly the item in
       // from the token; see loot-control.js.
-      [MODULE_ID]: (kind === "place") ? undefined : { from: token.getCenterPoint(), thrown: kind === "throw" }
+      [MODULE_ID]: (kind === "place") ? undefined : { from: token.getCenterPoint(token._source), thrown: kind === "throw" }
     });
   } finally {
     if ( !tile ) await returnLight();

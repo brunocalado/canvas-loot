@@ -8,17 +8,12 @@
 
 import {
   MODULE_ID, FLAG_ITEM, FLAG_LIGHT, FLIGHT_LIMITS, LOOT_SCALE, SETTING_DISABLED_TYPES, SETTING_QUANTITY_PATH,
-  QUERY_DROP, TEMPLATE_CHAT
+  QUERY_DROP
 } from "./constants.js";
+import { postLootMessage } from "./chat.js";
 import { classifyDistance, forgetHistory, getLightSourcesApi, getQuantity, isLootAt, serial } from "./helpers.js";
 
 export const LOOT_TAKEN = "There is already an item there.";
-
-const CHAT = {
-  place: { verb: "placed", icon: "fa-location-dot" },
-  drop: { verb: "dropped", icon: "fa-hand-holding" },
-  throw: { verb: "threw", icon: "fa-person-basketball" }
-};
 
 /**
  * Every rule a drop must pass. The dropping client runs it to preview a drag and to refuse early
@@ -245,19 +240,10 @@ async function gmDrop({ itemUuid, tokenUuid, levelUuid, x, y, quantity }, user) 
     if ( !done ) throw new Error("The item could not be removed from its actor.");
   }
 
-  // Loot the GM places freely is told to the GMs alone, since announcing it would give away treasure
-  // hidden before the session. It has no token to speak for it, and getSpeaker would fall back to
+  // Loot the GM places freely has no token to speak for it, and getSpeaker would fall back to
   // whatever this client controls, so the placing user speaks.
-  const placed = kind === "place";
-  const speaker = placed ? { scene: scene.id, alias: user.name } : ChatMessage.implementation.getSpeaker({ token });
-  const content = await foundry.applications.handlebars.renderTemplate(TEMPLATE_CHAT, {
-    event: kind, ...CHAT[kind], actorName: speaker.alias, item: { name: item.name, img: item.img },
-    tileUuid: tile.uuid,
-    distance: (kind === "throw") ? `${Math.round(distance * 10) / 10} ${scene.grid.units}`.trim() : null
-  });
-  await ChatMessage.implementation.create({
-    speaker, content, whisper: placed ? ChatMessage.implementation.getWhisperRecipients("GM").map(u => u.id) : []
-  });
+  const speaker = (kind === "place") ? { scene: scene.id, alias: user.name } : ChatMessage.implementation.getSpeaker({ token });
+  await postLootMessage({ event: kind, speaker, snapshot, tile, user, token, item, distance: (kind === "throw") ? distance : null });
 }
 
 /**
@@ -319,40 +305,9 @@ async function gmSpawn({ scene, levelId, point, itemData, from = null, thrown = 
 
   // Told to the GMs alone, like loot a GM places by hand.
   if ( chat ) {
-    const speaker = { scene: scene.id, alias: game.user.name };
-    const content = await foundry.applications.handlebars.renderTemplate(TEMPLATE_CHAT, {
-      event: "place", ...CHAT.place, actorName: speaker.alias, item: { name: snapshot.name, img: snapshot.img },
-      tileUuid: tile.uuid
-    });
-    await ChatMessage.implementation.create({
-      speaker, content, whisper: ChatMessage.implementation.getWhisperRecipients("GM").map(u => u.id)
-    });
+    await postLootMessage({ event: "place", speaker: { scene: scene.id, alias: game.user.name }, snapshot, tile, user: game.user });
   }
   return tile;
-}
-
-/**
- * Pan to the loot a drop or throw message points at, and ping it for this user alone. A player is
- * told the item is gone once the GM hides it, as for one already picked up.
- * @param {string} uuid
- */
-function showLoot(uuid) {
-  const tile = fromUuidSync(uuid);
-  if ( !tile || (tile.hidden && !game.user.isGM) ) {
-    ui.notifications.warn("That item is no longer there.");
-    return;
-  }
-  if ( tile.parent !== canvas.scene ) {
-    ui.notifications.warn("That item is on another scene.");
-    return;
-  }
-  if ( canvas.level && !tile.includedInLevel(canvas.level.id) ) {
-    ui.notifications.warn("That item is on another level.");
-    return;
-  }
-  const { x, y } = tile.shape.center;
-  canvas.animatePan({ x, y });
-  canvas.controls.drawPing({ x, y }, { user: game.user });
 }
 
 export function registerDrop() {
@@ -364,11 +319,5 @@ export function registerDrop() {
     if ( data.type !== "Item" ) return;
     handleDrop(data);
     return false;
-  });
-
-  // Messages created before cards carried the tile's uuid have nothing to show.
-  Hooks.on("renderChatMessageHTML", (message, html) => {
-    const card = html.querySelector(`.${MODULE_ID}.cl-chat-card[data-tile-uuid]`);
-    card?.addEventListener("click", () => showLoot(card.dataset.tileUuid));
   });
 }

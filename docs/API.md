@@ -13,6 +13,7 @@ The API is available as `CanvasLoot` and as `game.modules.get("canvas-loot").api
 - [The flight](#the-flight)
 - [Races](#races)
 - [Hooks](#hooks)
+- [Chat messages](#chat-messages)
 - [Depending on Canvas Loot](#depending-on-canvas-loot)
 
 ## Quick start
@@ -193,6 +194,7 @@ time to move into the space.
 | Hook | Where | Args | Notes |
 |---|---|---|---|
 | `canvas-loot.ready` | every client | `api` | Fired once, on `ready`. |
+| `canvas-loot.preChatMessage` | active GM | `messageData`, `{ event, token, item, snapshot, tile, user }` | Fired before each chat message Canvas Loot posts. Return `false` to post nothing. See [Chat messages](#chat-messages). |
 | `canvas-loot.pickup` | active GM | `token`, `item`, `{ tile, snapshot, user, merged }` | Fired after a pickup, once the item reached the actor and the tile is gone. Not fired for a pickup that failed. Can't be cancelled. |
 
 For `canvas-loot.pickup`: `token` is the `TokenDocument` that picked it up and `item` the `Item`
@@ -208,6 +210,52 @@ Hooks.on("canvas-loot.pickup", (token, item, { snapshot }) => {
   if ( snapshot.flags?.["my-module"]?.questItem ) ChatMessage.create({ content: `${foundry.utils.escapeHTML(token.name)} found it!` });
 });
 ```
+
+## Chat messages
+
+Every drop, throw, pickup and placed item posts a small card in chat. A system or module can give
+it its own look, or drop it, with `canvas-loot.preChatMessage`. It fires on the active GM, the
+client that posts the message, with the data the message is about to be created from:
+
+```js
+Hooks.on("canvas-loot.preChatMessage", (messageData, { event, snapshot }) => {
+  if ( event === "pickup" ) return false;   // no pickup cards
+  const { actorName, item } = messageData.flags["canvas-loot"];
+  messageData.content = `<div class="my-system-card">
+    <img src="${item.img}">
+    <p>${foundry.utils.escapeHTML(actorName)}: ${foundry.utils.escapeHTML(item.name)}</p>
+    <a data-canvas-loot-show>Show</a>
+  </div>`;
+});
+```
+
+Change `messageData` in place: `content`, `speaker`, `whisper`, or a `type` and `system` of your
+own message subtype. Every message carries what happened in `flags["canvas-loot"]`, as data and
+not as text, so a card can be built in any language without reading Canvas Loot's HTML:
+
+| Flag | | |
+|---|---|---|
+| `event` | `"place"`, `"drop"`, `"throw"` or `"pickup"` | |
+| `actorName` | `string` | Who did it: the token's name, or the GM's for a placed item. |
+| `item` | `{ name, img }` | |
+| `tileUuid` | `string` | The loot tile. Not on a pickup, whose tile is gone. |
+| `distance` | `number` | A throw's distance, rounded to one decimal. Throws only. |
+| `units` | `string` | The scene's grid units, such as `"m"`. Throws only. |
+
+Canvas Loot writes these flags again after the hook, so they stay as they are whatever a listener
+does to them.
+
+The second argument: `event` again, `token` the `TokenDocument` that acted (`null` for a placed
+item), `item` the `Item` the loot left (a drop or throw, and it may be deleted by now) or reached
+(a pickup), `null` for `spawnLoot`, `snapshot` the item data the tile holds, `tile` the loot
+`TileDocument` (deleted, for a pickup), and `user` the `User` who acted.
+
+A click on the element that carries `data-canvas-loot-show` pans to the loot and pings it, as on
+Canvas Loot's own card. Put it on whatever should do that in yours, or leave it out. A message
+without `tileUuid` has nothing to show.
+
+A placed item is whispered to the GMs. `spawnLoot` with `chat: false` posts no message and fires
+no hook.
 
 ## Depending on Canvas Loot
 

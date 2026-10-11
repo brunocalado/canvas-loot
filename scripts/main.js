@@ -13,6 +13,7 @@ import {
 } from "./constants.js";
 import { presetDisabledTypes } from "./helpers.js";
 import { refreshHighlights, registerLootControls } from "./loot-control.js";
+import { registerChat } from "./chat.js";
 import { registerDrop } from "./drop.js";
 import { registerDropPreview } from "./drop-preview.js";
 import { registerPickup } from "./pickup.js";
@@ -23,6 +24,7 @@ import { api } from "./api.js";
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | init`);
   registerLootControls();
+  registerChat();
   registerDrop();
   registerDropPreview();
   registerPickup();

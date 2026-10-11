@@ -17,11 +17,6 @@
   padding-left: var(--cl-gap);
   border-left: 3px solid var(--cl-accent);
 
-  /* A drop or a throw card pans to its loot when clicked. */
-  &[data-tile-uuid] {
-    cursor: pointer;
-  }
-
   .cl-chat-card-img {
     flex: 0 0 36px;
     width: 36px;
@@ -40,4 +35,10 @@
       color: var(--cl-accent);
     }
   }
+}
+
+/* Whatever a loot message marks pans to its loot when clicked, in our card or in one that a system
+   put in its place. */
+[data-canvas-loot-show] {
+  cursor: pointer;
 }

@@ -6,7 +6,8 @@
  * it under the terms of the GNU General Public License version 3.
  */
 
-import { MODULE_ID, FLAG_ITEM, FLAG_LIGHT, QUERY_PICKUP, SETTING_QUANTITY_PATH, TEMPLATE_CHAT } from "./constants.js";
+import { MODULE_ID, FLAG_ITEM, FLAG_LIGHT, QUERY_PICKUP, SETTING_QUANTITY_PATH } from "./constants.js";
+import { postLootMessage } from "./chat.js";
 import { classifyDistance, forgetHistory, getLightSourcesApi, getQuantity, serial } from "./helpers.js";
 
 /**
@@ -131,11 +132,7 @@ async function gmPickup({ tileUuid, tokenUuid }, user) {
   }
 
   const speaker = ChatMessage.implementation.getSpeaker({ token });
-  const content = await foundry.applications.handlebars.renderTemplate(TEMPLATE_CHAT, {
-    event: "pickup", verb: "picked up", icon: "fa-hand-back-fist",
-    actorName: speaker.alias, item: { name: item.name, img: item.img }
-  });
-  await ChatMessage.implementation.create({ speaker, content });
+  await postLootMessage({ event: "pickup", speaker, snapshot, tile, user, token, item });
   // After the item reached the actor and the tile is gone, on the active GM only: the one client
   // that knows which item it became, and the one a listener that writes documents should run on.
   Hooks.callAll(`${MODULE_ID}.pickup`, token, item, { tile, snapshot, user, merged: !!stack });

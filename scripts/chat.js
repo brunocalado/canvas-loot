@@ -6,7 +6,7 @@
  * it under the terms of the GNU General Public License version 3.
  */
 
-import { MODULE_ID, TEMPLATE_CHAT } from "./constants.js";
+import { MODULE_ID, SETTING_QUANTITY_PATH, TEMPLATE_CHAT } from "./constants.js";
 
 // Whole sentences rather than a verb between two names, so a translation can reorder the words or
 // add its own ("jogou a Tocha a 12 m"). The placeholders take the same shape game.i18n.format does.
@@ -16,6 +16,8 @@ const EVENTS = {
   throw: { icon: "fa-person-basketball", text: "{actor} threw {item} {distance}" },
   pickup: { icon: "fa-hand-back-fist", text: "{actor} picked up {item}" }
 };
+// What {item} reads as for a stack, its own sentence for the same reason.
+const STACK = "{quantity} × {name}";
 
 // Marks the element a click on pans to the loot. An attribute rather than our card's class, so a
 // card that replaces ours chooses where the click goes, and its own buttons stay its own.
@@ -36,6 +38,11 @@ const SHOW_ATTR = `data-${MODULE_ID}-show`;
  */
 export async function postLootMessage({ event, speaker, snapshot, tile, user, token = null, item = null, distance = null }) {
   const data = { event, actorName: speaker.alias, item: { name: snapshot.name, img: snapshot.img } };
+  // Left out rather than 1 when the world has no quantity field, so a card doesn't claim a count
+  // the system never had. It is what the tile holds, not what the actor's stack became.
+  const path = game.settings.get(MODULE_ID, SETTING_QUANTITY_PATH);
+  const quantity = path ? foundry.utils.getProperty(snapshot, path) : null;
+  if ( Number.isInteger(quantity) ) data.item.quantity = quantity;
   // A picked-up tile is gone, so there is nothing to show.
   if ( event !== "pickup" ) data.tileUuid = tile.uuid;
   if ( distance !== null ) {
@@ -44,15 +51,17 @@ export async function postLootMessage({ event, speaker, snapshot, tile, user, to
   }
 
   const { escapeHTML } = foundry.utils;
+  const format = (text, parts) => text.replace(/\{(\w+)\}/g, (_, key) => parts[key]);
+  const itemLabel = (data.item.quantity > 1) ? format(STACK, data.item) : data.item.name;
   const parts = {
     actor: `<strong>${escapeHTML(data.actorName)}</strong>`,
-    item: `<strong>${escapeHTML(data.item.name)}</strong>`,
+    item: `<strong>${escapeHTML(itemLabel)}</strong>`,
     distance: escapeHTML(`${data.distance} ${data.units}`.trim())
   };
   const { icon, text } = EVENTS[event];
   const content = await foundry.applications.handlebars.renderTemplate(TEMPLATE_CHAT, {
     event, icon, img: data.item.img, show: !!data.tileUuid,
-    text: text.replace(/\{(\w+)\}/g, (_, key) => parts[key])
+    text: format(text, parts)
   });
 
   // Loot a GM places is told to the GMs alone, since announcing it would give away treasure hidden

@@ -222,22 +222,36 @@ Hooks.on("canvas-loot.preChatMessage", (messageData, { event, snapshot }) => {
   if ( event === "pickup" ) return false;   // no pickup cards
   const { actorName, item } = messageData.flags["canvas-loot"];
   messageData.content = `<div class="my-system-card">
-    <img src="${item.img}">
+    <img src="${foundry.utils.escapeHTML(item.img)}">
     <p>${foundry.utils.escapeHTML(actorName)}: ${foundry.utils.escapeHTML(item.name)}</p>
     <a data-canvas-loot-show>Show</a>
   </div>`;
 });
 ```
 
-Change `messageData` in place: `content`, `speaker`, `whisper`, or a `type` and `system` of your
-own message subtype. Every message carries what happened in `flags["canvas-loot"]`, as data and
+Change `messageData` in place, any field `ChatMessage.create` takes: `content`, `flavor`,
+`speaker`, `whisper`, or a `type` and `system` of your own message subtype.
+
+The hook is not awaited: Canvas Loot creates the message as soon as the listener returns, so
+`messageData` must be finished by then. A listener that is `async`, or that waits on
+`renderTemplate`, changes nothing, and the message goes out with Canvas Loot's own card. Compile
+your template beforehand and call it inside the hook:
+
+```js
+Hooks.once("canvas-loot.ready", async () => {
+  const template = await foundry.applications.handlebars.getTemplate("systems/my-system/templates/loot.hbs");
+  Hooks.on("canvas-loot.preChatMessage", messageData => {
+    messageData.content = template(messageData.flags["canvas-loot"]);
+  });
+});
+``` Every message carries what happened in `flags["canvas-loot"]`, as data and
 not as text, so a card can be built in any language without reading Canvas Loot's HTML:
 
 | Flag | | |
 |---|---|---|
 | `event` | `"place"`, `"drop"`, `"throw"` or `"pickup"` | |
 | `actorName` | `string` | Who did it: the token's name, or the GM's for a placed item. |
-| `item` | `{ name, img }` | |
+| `item` | `{ name, img, quantity }` | `quantity` is how many the tile holds or held: what was dropped, thrown or picked up, not the size of the actor's stack after a pickup merged into it. Left out when the world has no quantity field (see [`getQuantityPath`](#getquantitypath--string)) or the item has no number there. |
 | `tileUuid` | `string` | The loot tile. Not on a pickup, whose tile is gone. |
 | `distance` | `number` | A throw's distance, rounded to one decimal. Throws only. |
 | `units` | `string` | The scene's grid units, such as `"m"`. Throws only. |

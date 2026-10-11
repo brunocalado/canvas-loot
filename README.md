@@ -87,6 +87,8 @@ Choose how loot draws the eye on the map:
 - Ring: a circle pulses on the ground around it.
 - None: loot sits still, and players have to find it themselves.
 
+![The same scroll shown with each highlight: none, sparkle, shine, jiggle, hop and ring](docs/loot-highlights.gif)
+
 Anyone who turns on Foundry's photosensitive mode sees loot at rest, without the animation.
 
 ## Settings

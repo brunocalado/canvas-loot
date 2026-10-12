@@ -244,8 +244,10 @@ Hooks.once("canvas-loot.ready", async () => {
     messageData.content = template(messageData.flags["canvas-loot"]);
   });
 });
-``` Every message carries what happened in `flags["canvas-loot"]`, as data and
-not as text, so a card can be built in any language without reading Canvas Loot's HTML:
+```
+
+Every message carries what happened in `flags["canvas-loot"]`, as data and not as text, so a card
+can be built in any language without reading Canvas Loot's HTML:
 
 | Flag | | |
 |---|---|---|

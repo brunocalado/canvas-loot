@@ -1,4 +1,4 @@
-# Unreleased
+# 0.4.0
 
 - [Added] The GM can right-click loot on the canvas to open the item's sheet, read-only, without picking it up.
 - [Fixed] Loot no longer shows where your tokens cannot see: behind walls, outside a limited vision cone, or in explored fog. The GM, and anyone without token vision, still sees it all.

@@ -65,6 +65,8 @@ of a second entry (in systems that track quantities). If two players go for the 
 first one gets it.
 
 Players can only click loot their tokens can see, and loot the GM hides stays out of their reach.
+The GM can right-click any loot to open its item sheet and see what it is without picking it up. The
+sheet is read-only, and it closes when the loot is picked up or deleted.
 Whenever someone drops, throws or picks something up, a short chat message tells the table. If you
 lose track of where an item landed, click the drop or throw message and the map pans to it.
 

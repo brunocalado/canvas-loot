@@ -12,6 +12,7 @@ import {
 } from "./constants.js";
 import { forgetHistory } from "./helpers.js";
 import { requestPickup } from "./pickup.js";
+import { closeLootSheet, showLootSheet } from "./loot-sheet.js";
 
 /**
  * A clickable overlay for one loot tile, living in canvas.controls like core's DoorControl.
@@ -26,6 +27,7 @@ export class LootControl extends PIXI.Container {
     this.tile = tile;
     this.phase = Math.random();
     this.flight = null;
+    this.rightOrigin = null;
   }
 
   draw() {
@@ -96,7 +98,9 @@ export class LootControl extends PIXI.Container {
     this.removeAllListeners();
     this.on("pointerover", this.#onPointerOver)
       .on("pointerout", this.#onPointerOut)
-      .on("pointerdown", this.#onPointerDown);
+      .on("pointerdown", this.#onPointerDown)
+      .on("rightdown", this.#onRightDown)
+      .on("rightup", this.#onRightUp);
     return this;
   }
 
@@ -193,6 +197,24 @@ export class LootControl extends PIXI.Container {
     if ( event.button !== 0 ) return;
     event.stopPropagation(); // Keeps the stage from running leftClickRelease on the controlled tokens
     requestPickup(this.tile.document);
+  }
+
+  // No stopPropagation on either: the stage's MouseInteractionManager needs the press to pan, and its
+  // right-click only closes the HUD and the ruler. Opening on release, not on press as core's doors
+  // do, keeps a pan that starts over loot from opening anything: a tile covers most of a grid space.
+  #onRightDown(event) {
+    this.rightOrigin = game.user.isGM ? { x: event.global.x, y: event.global.y } : null;
+  }
+
+  #onRightUp(event) {
+    const origin = this.rightOrigin;
+    this.rightOrigin = null;
+    if ( !origin ) return;
+    // Same threshold, in screen pixels, that core uses to tell a right-click from a pan.
+    const moved = Math.hypot(event.global.x - origin.x, event.global.y - origin.y);
+    if ( moved < foundry.canvas.interaction.MouseInteractionManager.DEFAULT_DRAG_RESISTANCE_PX ) {
+      showLootSheet(this.tile.document);
+    }
   }
 }
 
@@ -429,6 +451,7 @@ export function registerLootControls() {
   });
   // A pickup marks its deletion the same way; a GM deleting the tile on the Tiles layer plays nothing.
   Hooks.on("deleteTile", (tileDoc, options) => {
+    closeLootSheet(tileDoc);
     if ( (tileDoc.parent === canvas.scene) && options[MODULE_ID]?.pickedUp ) {
       playSound(SETTING_PICKUP_SOUND, SETTING_PICKUP_VOLUME);
     }

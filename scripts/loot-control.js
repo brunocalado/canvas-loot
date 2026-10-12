@@ -103,7 +103,7 @@ export class LootControl extends PIXI.Container {
   reposition() {
     const { x, y } = this.tile.bounds;
     this.position.set(x, y);
-    this.visible = this.isVisible;
+    this.refreshVisibility();
 
     // Lay the mask over the tile's image the way Tile#_refreshPosition, _refreshRotation and
     // _refreshSize lay out the mesh; the mesh has the same texture, so its scale carries the fit.
@@ -138,6 +138,7 @@ export class LootControl extends PIXI.Container {
   fly(flight) {
     this.flight = { ...flight, start: null };
     this.alpha = 0;
+    this.refreshVisibility();
   }
 
   /** Put the tile's mesh back where core laid it out, after a jiggle or a hop moved it. */
@@ -149,12 +150,30 @@ export class LootControl extends PIXI.Container {
     mesh.angle = rotation;
   }
 
+  /** Whether this loot is seen: the one test behind both the overlay and the tile's image. */
   get isVisible() {
     const doc = this.tile.document;
     if ( doc.hidden && !game.user.isGM ) return false;
     if ( !doc.viewed ) return false;
     if ( !canvas.visibility.tokenVision ) return true;
-    return canvas.visibility.testVisibility(this.tile.center, { tolerance: 0 });
+    // The tile's own elevation: core compares it with each vision source's eye height, and loot
+    // dropped by a raised token lies above its Level's base, which core assumes without it. The
+    // tolerance makes a half-seen item count as seen.
+    const { x, y } = this.tile.center;
+    const tolerance = Math.min(this.hitArea.width, this.hitArea.height) / 4;
+    return canvas.visibility.testVisibility({ x, y, elevation: doc.elevation }, { tolerance });
+  }
+
+  /**
+   * Show or hide the overlay and the tile's image together. Core never tests a Tile against vision,
+   * so without this the image showed in explored fog, behind walls and outside a vision cone.
+   */
+  refreshVisibility() {
+    this.visible = this.isVisible;
+    const mesh = this.tile.mesh;
+    if ( !mesh || mesh.destroyed ) return;
+    // A flight keeps the image hidden until its delay ends; animateFlight takes over from there.
+    mesh.renderable = this.visible && (!this.flight || this.flight.launched);
   }
 
   #onPointerOver(event) {
@@ -229,9 +248,11 @@ function animateFlight(control, now) {
   const flight = control.flight;
   flight.start ??= now;
   // renderable rather than alpha or visible: core rewrites those whenever the tile refreshes, as a
-  // hover does, but never touches renderable on a tile's mesh.
+  // hover does, but never touches renderable on a tile's mesh. A landing space nobody sees stays
+  // hidden throughout, and refreshVisibility takes the image over once the flight lands.
   const t = now - flight.start - flight.delay;
-  mesh.renderable = t >= 0;
+  flight.launched = t >= 0;
+  mesh.renderable = flight.launched && control.visible;
   if ( t < 0 ) return;
   // Core's fit, re-read whenever core has set the scale since the last frame: the first frames can
   // come before the texture is fitted.
@@ -433,7 +454,7 @@ export function registerLootControls() {
     if ( controls.get(tile.id)?.tile === tile ) removeControl(tile.id);
   });
   Hooks.on("sightRefresh", () => {
-    for ( const control of controls.values() ) control.visible = control.isVisible;
+    for ( const control of controls.values() ) control.refreshVisibility();
   });
   Hooks.on("activateCanvasLayer", () => {
     if ( container ) syncLayerState();

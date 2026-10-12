@@ -1,3 +1,7 @@
+# Unreleased
+
+- [Fixed] Loot no longer shows where your tokens cannot see: behind walls, outside a limited vision cone, or in explored fog. The GM, and anyone without token vision, still sees it all.
+
 # 0.3.0
 
 - [Added] API: the `canvas-loot.preChatMessage` hook lets a system or module restyle or cancel every loot chat card before it is posted. See "Chat messages" in docs/API.md.

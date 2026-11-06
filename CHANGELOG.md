@@ -2,6 +2,7 @@
 
 - [Fixed] Placing an item from inside a compendium Actor copies it. It no longer removes the item from an unlocked compendium, or fails with an error on a locked one.
 - [Fixed] Items can be dragged out of a compendium Actor's sheet. With Canvas Loot active, that drag failed with a console error, whatever the drop target.
+- [Fixed] An item placed or dropped straight from a compendium keeps its origin once picked up, so whatever recognises a carried item by its compendium source, such as Light Sources with a renamed item, still does.
 
 # 0.4.0
 

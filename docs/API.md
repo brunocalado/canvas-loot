@@ -129,6 +129,14 @@ Creates one loot tile from item data.
 | `flight` | `object` | `{}` | The flight's shape. See [The flight](#the-flight). Ignored without `from`. |
 | `chat` | `boolean` | `true` | Whisper the GMs a "placed" card that pans to the tile. |
 
+`item.toObject()` on a compendium entry doesn't say where it came from. For the character who picks the
+item up to carry that origin, as a copy from a compendium does, set it on the data you pass:
+
+```js
+const itemData = item.toObject();
+if ( item.pack ) foundry.utils.setProperty(itemData, "_stats.compendiumSource", item.uuid);
+```
+
 It places the item at `point` even when a token stands there: only `findLootSpaces` keeps loot
 off tokens, so a point you choose yourself is yours to choose.
 

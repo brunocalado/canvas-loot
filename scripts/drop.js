@@ -185,6 +185,10 @@ async function gmDrop({ itemUuid, tokenUuid, levelUuid, x, y, quantity }, user) 
   // edited or deleted after the drop.
   const snapshot = item.toObject();
   for ( const key of ["_id", "folder", "sort", "ownership"] ) delete snapshot[key];
+  // A pack entry's own source is usually null, since it is the source, so the copy must be told. Core
+  // writes this on its own import and sheet drop; without it, the origin would depend on whether this
+  // client's cached entry already went through fromDropData, which writes into that cached document.
+  if ( item.pack ) foundry.utils.setProperty(snapshot, "_stats.compendiumSource", item.uuid);
   if ( moved < stack ) foundry.utils.setProperty(snapshot, path, moved);
   // The light stands where lootTileData will centre the tile, rounded the same way.
   const x0 = Math.round(centre.x);

@@ -1,4 +1,4 @@
-# Unreleased
+# 0.4.1
 
 - [Fixed] Placing an item from inside a compendium Actor copies it. It no longer removes the item from an unlocked compendium, or fails with an error on a locked one.
 - [Fixed] Items can be dragged out of a compendium Actor's sheet. With Canvas Loot active, that drag failed with a console error, whatever the drop target.

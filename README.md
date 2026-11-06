@@ -41,7 +41,8 @@ around walls. The space under the cursor shows the throw distance, or turns red 
 item can't go there.
 
 The GM can place items anywhere without a token, which is handy for hiding treasure before the
-session. Only the GMs are told about it in chat, so the players don't find out.
+session. The item can also come from the Items directory or a compendium, and the original stays
+there. Only the GMs are told about it in chat, so the players don't find out.
 With the token of the character carrying the item selected, the GM drops and throws by the same
 rules as a player.
 

@@ -59,7 +59,14 @@ function readPayload(value) {
   }
   if ( (data?.type !== "Item") || (typeof data.uuid !== "string") ) return;
   // A compendium entry resolves to an index entry, not an Item; only a GM drops those, anywhere.
-  const item = fromUuidSync(data.uuid);
+  // It throws on an item inside a compendium Actor. This runs inside setData, so the throw would keep
+  // the sheet's payload from being written, and the drag would then fail on every drop target.
+  let item;
+  try {
+    item = fromUuidSync(data.uuid);
+  } catch {
+    return;
+  }
   dragged = (item?.documentName === "Item") ? item : null;
 }
 

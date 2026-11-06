@@ -85,7 +85,7 @@ async function handleDrop(data) {
       throw new Error(LOOT_TAKEN);
     }
     // Only an actor's item is split; a copy from the directory or a compendium takes it whole.
-    const stack = (item.parent?.documentName === "Actor") ? getQuantity(item) : null;
+    const stack = ((item.parent?.documentName === "Actor") && !item.pack) ? getQuantity(item) : null;
     let quantity;
     if ( stack > 1 ) {
       quantity = await askQuantity(stack);
@@ -166,7 +166,9 @@ async function gmDrop({ itemUuid, tokenUuid, levelUuid, x, y, quantity }, user) 
   // An item without a number at the quantity path moves whole. A missing quantity also moves the
   // whole stack, which the dialog allows anyway. The stack is re-read here, under the queue, so a
   // request asking for more than an earlier one left behind is refused rather than shrunk.
-  const onActor = item.parent?.documentName === "Actor";
+  // An item inside a compendium Actor is a copy like any pack entry: deleting it would take it out of
+  // an unlocked pack, and a locked one refuses the delete.
+  const onActor = (item.parent?.documentName === "Actor") && !item.pack;
   const path = game.settings.get(MODULE_ID, SETTING_QUANTITY_PATH);
   const stack = onActor ? getQuantity(item) : null;
   let moved = stack;

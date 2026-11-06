@@ -1,3 +1,7 @@
+# Unreleased
+
+- [Fixed] Placing an item from inside a compendium Actor copies it. It no longer removes the item from an unlocked compendium, or fails with an error on a locked one.
+
 # 0.4.0
 
 - [Added] The GM can right-click loot on the canvas to open the item's sheet, read-only, without picking it up.
